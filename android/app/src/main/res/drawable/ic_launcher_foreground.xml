@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Background circle -->
+    <path
+        android:fillColor="#05C8AC"
+        android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0" />
+    <!-- Heart icon -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,72.7l-4.35,-3.96C36.2,57.08 28,51.84 28,45.5c0,-5.08 3.98,-9 8.5,-9 2.61,0 5.12,1.22 6.75,3.14C45.63,37.72 48.14,36.5 50.75,36.5c4.52,0 8.5,3.92 8.5,9 0,6.34 -8.2,11.58 -21.55,23.24L54,72.7z" />
+    <!-- Plus sign -->
+    <path
+        android:fillColor="#05C8AC"
+        android:pathData="M51,44h6v4h4v6h-4v4h-6v-4h-4v-6h4z" />
+</vector>

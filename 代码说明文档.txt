@@ -1,0 +1,722 @@
+================================================================================
+     术后疼痛智能管理系统 — 代码说明文档（完整版）
+================================================================================
+
+目录：
+  一、项目概述与技术栈
+  二、项目目录结构总览
+  三、后端代码详解
+  四、前端代码详解
+  五、Android端代码详解
+  六、数据库设计（全部16张表）
+  七、API接口文档（全部端点）
+  八、前后端数据流说明
+  九、角色权限与路由隔离
+  十、关键设计决策与实现思路
+
+================================================================================
+一、项目概述与技术栈
+================================================================================
+
+  项目名称：术后疼痛智能管理系统（Smart Healthcare）
+  项目类型：移动端APP（Android） + Web端（浏览器可用）
+  核心功能：患者术后疼痛评分、镇痛管理、康复指导、医护预警、数据统计
+
+---------- 技术栈 ----------
+
+  【后端】
+    运行环境：Node.js (v16+)
+    Web框架：Express.js 4.18
+    数据库：SQLite（通过 sql.js 纯JavaScript实现，无需安装数据库软件）
+    认证：JWT (jsonwebtoken) + bcryptjs 密码加密
+    跨域：cors 中间件
+
+  【前端】
+    框架：React 18 (函数式组件 + Hooks)
+    路由：React Router DOM 6
+    UI框架：TailwindCSS 3.4（原子化CSS）
+    图标：Lucide React（1500+图标库）
+    HTTP客户端：Axios
+    构建工具：Vite 5
+    图表：纯SVG手绘（无第三方图表库依赖）
+
+  【Android】
+    最低SDK：Android 8.0 (API 26)
+    目标SDK：Android 14 (API 34)
+    核心组件：WebView + WebViewClient + WebChromeClient
+    构建工具：Gradle 8.5 + AGP 8.2.0
+    依赖库：AndroidX AppCompat, WebKit, Material Design
+
+================================================================================
+二、项目目录结构总览
+================================================================================
+
+医护app/
+│
+├── backend/                          ← 后端服务（Node.js）
+│   ├── server.js                     ← 服务入口，注册路由和中间件
+│   ├── package.json                  ← 后端依赖声明
+│   ├── db/
+│   │   ├── init.js                   ← 数据库初始化 + 建表 + 种子数据
+│   │   └── healthcare.db             ← SQLite数据库文件（运行后自动生成）
+│   ├── middleware/
+│   │   └── auth.js                   ← JWT认证中间件 + Token生成
+│   └── routes/                       ← API路由（每个文件对应一组接口）
+│       ├── auth.js                   ← 登录/注册/获取用户列表
+│       ├── painScores.js             ← 疼痛评分CRUD
+│       ├── reminders.js              ← 今日提醒CRUD
+│       ├── records.js                ← 诊疗记录查询
+│       ├── messages.js               ← 聊天消息收发
+│       ├── consultations.js          ← 在线咨询CRUD
+│       ├── healthProfiles.js         ← 健康档案查询
+│       ├── nursingTasks.js           ← 护理任务CRUD
+│       ├── adverseReactions.js       ← 不良反应上报
+│       ├── medications.js            ← 用药记录 + 统计数据
+│       └── patientData.js            ← 综合数据接口（PCA泵/自评/手术/
+│                                        随访/留言/通知/方案/设置/预警/趋势/康复）
+│
+├── frontend/                         ← 前端工程（React + Vite）
+│   ├── package.json                  ← 前端依赖声明
+│   ├── vite.config.js                ← Vite配置（代理/构建输出路径）
+│   ├── tailwind.config.js            ← TailwindCSS配置（自定义主题色）
+│   ├── postcss.config.js             ← PostCSS配置
+│   ├── index.html                    ← HTML入口
+│   └── src/
+│       ├── main.jsx                  ← React入口，挂载App + HashRouter
+│       ├── App.jsx                   ← 路由定义 + 权限守卫
+│       ├── index.css                 ← 全局样式 + TailwindCSS导入
+│       ├── api/
+│       │   └── index.js              ← Axios封装 + 所有API方法导出
+│       ├── components/
+│       │   └── BottomNav.jsx         ← 底部导航栏公共组件
+│       └── pages/
+│           ├── Login.jsx             ← 登录页（患者+医护共用）
+│           ├── patient/              ← 患者端页面（7个）
+│           │   ├── Home.jsx          ← 患者首页
+│           │   ├── Records.jsx       ← 镇痛管理（疼痛曲线/用药/PCA/自评）
+│           │   ├── Recovery.jsx      ← 康复中心
+│           │   ├── Consultation.jsx  ← 消息中心（通知/预警/康复/咨询/团队）
+│           │   ├── Profile.jsx       ← 个人中心
+│           │   ├── Archive.jsx       ← 健康档案（基本信息/手术/随访/留言）
+│           │   └── Chat.jsx          ← 聊天详情页
+│           └── nurse/                ← 医护端页面（10个）
+│               ├── Home.jsx          ← 医护首页（工作台）
+│               ├── Patients.jsx      ← 患者管理列表
+│               ├── PatientDetail.jsx ← 患者详情页
+│               ├── Alerts.jsx        ← 智能预警中心
+│               ├── Messages.jsx      ← 消息中心
+│               ├── Profile.jsx       ← 个人中心
+│               ├── PainPlans.jsx     ← 镇痛方案管理
+│               ├── Stats.jsx         ← 数据统计中心
+│               ├── Settings.jsx      ← 系统设置
+│               └── Chat.jsx          ← 聊天详情页
+│
+├── android/                          ← Android工程
+│   ├── build.gradle                  ← 顶层Gradle配置
+│   ├── settings.gradle               ← 项目设置
+│   ├── gradle.properties             ← Gradle属性
+│   ├── local.properties              ← 本地SDK路径（不提交版本控制）
+│   ├── gradle/wrapper/               ← Gradle Wrapper（自动下载Gradle）
+│   └── app/
+│       ├── build.gradle              ← APP模块构建配置
+│       └── src/main/
+│           ├── AndroidManifest.xml   ← APP权限和Activity声明
+│           ├── java/com/healthcare/app/
+│           │   ├── MainActivity.java ← 主Activity（WebView容器）
+│           │   └── SplashActivity.java ← 启动页Activity
+│           ├── res/                  ← Android资源文件
+│           │   ├── layout/           ← 布局XML
+│           │   ├── values/           ← 颜色/字符串/主题
+│           │   ├── drawable/         ← 图标和背景
+│           │   └── mipmap-*/         ← APP图标（各分辨率）
+│           └── assets/www/           ← 前端构建产物（vite build输出到此）
+│               ├── index.html
+│               └── assets/           ← JS/CSS打包文件
+│
+├── 部署启动教程.txt                   ← 部署文档（您正在看的另一个文档）
+├── 代码说明文档.txt                   ← 本文档
+└── 需求文档                          ← 产品需求说明
+
+================================================================================
+三、后端代码详解
+================================================================================
+
+---------- 3.1 server.js（服务入口）----------
+
+  功能：
+    - 创建Express应用，监听3001端口
+    - 注册CORS跨域、JSON解析中间件
+    - 初始化SQLite数据库
+    - 注册所有API路由
+    - 自动持久化：所有写操作（POST/PUT/DELETE）后自动保存数据库到磁盘
+
+  关键代码逻辑：
+    app.use((req, res, next) => {
+      // 拦截res.json，在写操作后自动调用db.save()
+      // 确保数据不会因进程退出而丢失
+    });
+
+---------- 3.2 db/init.js（数据库初始化）----------
+
+  功能：
+    - 使用sql.js创建内存数据库
+    - 包装兼容层（模拟better-sqlite3的prepare/get/all/run接口）
+    - 创建全部16张表（CREATE TABLE IF NOT EXISTS）
+    - 首次运行时插入完整的示例数据（seedData函数）
+    - 每30秒自动保存数据库到磁盘文件
+
+  包装兼容层说明：
+    sql.js是纯JavaScript的SQLite实现，API与better-sqlite3不同。
+    wrappedDb对象封装了以下方法：
+      .exec(sql)           → 执行DDL语句（建表等）
+      .prepare(sql).run()  → 执行INSERT/UPDATE/DELETE，返回lastInsertRowid
+      .prepare(sql).get()  → 查询单行，返回对象或undefined
+      .prepare(sql).all()  → 查询多行，返回数组
+      .save()              → 将内存数据库导出为Buffer写入磁盘文件
+
+---------- 3.3 middleware/auth.js（认证中间件）----------
+
+  功能：
+    - authMiddleware：从请求头提取JWT Token，验证有效性，将用户信息挂载到req.user
+    - generateToken：根据用户信息生成JWT Token（有效期7天）
+    - JWT密钥：'healthcare_app_secret_key_2026'
+
+  Token格式：
+    Header: Authorization: Bearer <token>
+    Payload: { id, username, role, name }
+
+---------- 3.4 routes/ 路由文件 ----------
+
+  每个路由文件导出一个函数，接收db对象作为参数，返回Express Router。
+
+  auth.js:
+    POST /api/auth/login        → 用户登录（验证密码，返回Token和用户信息）
+    GET  /api/auth/staff         → 获取医护人员列表
+    GET  /api/auth/patients      → 获取患者列表
+
+  painScores.js:
+    GET  /api/pain-scores/:patientId         → 获取患者所有疼痛评分
+    GET  /api/pain-scores/:patientId/latest   → 获取最新一条评分
+    POST /api/pain-scores                     → 新增疼痛评分
+
+  reminders.js:
+    GET  /api/reminders/:patientId    → 获取患者提醒列表
+    PUT  /api/reminders/:id/status    → 更新提醒状态（pending→done）
+
+  records.js:
+    GET  /api/records/:patientId      → 获取患者诊疗记录
+
+  messages.js:
+    GET  /api/messages/conversations  → 获取当前用户的对话列表
+    GET  /api/messages/:otherId       → 获取与某人的聊天记录
+    POST /api/messages                → 发送消息
+    GET  /api/messages/unread/count   → 获取未读消息数
+
+  consultations.js:
+    GET  /api/consultations           → 获取咨询列表
+    POST /api/consultations           → 创建新咨询
+
+  healthProfiles.js:
+    GET  /api/health-profiles/:patientId  → 获取健康档案
+
+  nursingTasks.js:
+    GET  /api/nursing-tasks              → 获取护理任务列表
+    PUT  /api/nursing-tasks/:id/status   → 更新任务状态
+
+  adverseReactions.js:
+    GET  /api/adverse-reactions/:patientId  → 获取不良反应列表
+    POST /api/adverse-reactions             → 上报不良反应
+
+  medications.js:
+    GET  /api/medications/:patientId   → 获取用药记录
+    GET  /api/medications/stats/all    → 获取全局统计数据
+
+  patientData.js（综合数据路由，包含以下所有端点）:
+    GET  /api/pca-pump/:patientId          → PCA泵状态
+    PUT  /api/pca-pump/:patientId/press    → PCA泵按压（次数+1，药量-1）
+    GET  /api/self-ratings/:patientId      → 镇痛自评列表
+    POST /api/self-ratings                 → 提交自评
+    GET  /api/surgery-records/:patientId   → 手术记录
+    GET  /api/follow-ups/:patientId        → 随访记录
+    GET  /api/doctor-notes/:patientId      → 医生留言
+    GET  /api/notifications/:patientId     → 患者通知（?type=alert|recovery）
+    GET  /api/pain-plans                   → 镇痛方案列表（JOIN用户和档案）
+    PUT  /api/pain-plans/:id/confirm       → 确认方案
+    PUT  /api/pain-plans/:id               → 修改方案
+    GET  /api/nurse-settings/:nurseId      → 护士设置
+    PUT  /api/nurse-settings/:nurseId      → 保存护士设置
+    GET  /api/nurse-alerts                 → 智能预警（实时计算）
+    GET  /api/stats/trend                  → 7天疼痛控制趋势
+    GET  /api/recovery-progress/:patientId → 康复进度
+
+================================================================================
+四、前端代码详解
+================================================================================
+
+---------- 4.1 main.jsx（入口）----------
+
+  使用 HashRouter（而非BrowserRouter），原因：
+  Android WebView 加载本地file://协议的HTML，BrowserRouter无法处理
+  file://路径，HashRouter使用URL的#部分做路由，兼容性更好。
+
+---------- 4.2 App.jsx（路由与权限）----------
+
+  ProtectedRoute 组件：
+    - 检查 localStorage 中是否有 token 和 user
+    - 如果没有，重定向到 /login
+    - 如果有role参数，检查用户角色是否匹配
+    - 患者端路由全部以 /patient 开头，要求 role='patient'
+    - 医护端路由全部以 /nurse 开头，要求 role='nurse'
+    → 这确保了患者和医护功能的严格隔离
+
+  路由清单：
+    /login                    → 登录页
+    /patient                  → 患者首页
+    /patient/records          → 镇痛管理
+    /patient/recovery         → 康复中心
+    /patient/consultation     → 消息中心
+    /patient/profile          → 个人中心
+    /patient/archive          → 健康档案
+    /patient/chat/:otherId    → 聊天详情
+    /nurse                    → 医护首页
+    /nurse/patients           → 患者列表
+    /nurse/patient/:patientId → 患者详情
+    /nurse/alerts             → 预警中心
+    /nurse/messages           → 消息中心
+    /nurse/profile            → 个人中心
+    /nurse/pain-plans         → 镇痛方案
+    /nurse/stats              → 数据统计
+    /nurse/settings           → 系统设置
+    /nurse/chat/:otherId      → 聊天详情
+
+---------- 4.3 api/index.js（API封装层）----------
+
+  核心逻辑：
+    getBaseURL() 根据运行环境动态决定API地址：
+      - Android WebView → 使用 window._API_BASE（由Java注入）
+      - file://协议 → 使用 10.0.2.2:3001（模拟器）
+      - http://协议 → 使用 /api（Vite代理到localhost:3001）
+
+    请求拦截器：自动附加 Authorization: Bearer <token>
+    响应拦截器：401状态码自动清除登录信息并跳转登录页
+
+  导出的API模块（17个）：
+    authAPI          → login/getStaff/getPatients
+    painAPI          → getScores/getLatest/submit
+    reminderAPI      → getList/updateStatus
+    recordAPI        → getList
+    messageAPI       → getConversations/getMessages/send/getUnreadCount
+    consultAPI       → getList/create
+    profileAPI       → get
+    taskAPI          → getList/updateStatus
+    reactionAPI      → getList/create
+    medicationAPI    → getList
+    statsAPI         → getAll/getTrend
+    pcaAPI           → getStatus/press
+    selfRatingAPI    → getList/submit
+    surgeryAPI       → getList
+    followUpAPI      → getList
+    doctorNoteAPI    → getList
+    notificationAPI  → getAlerts/getRecovery
+    painPlanAPI      → getAll/confirm/update
+    nurseSettingAPI  → get/update
+    nurseAlertAPI    → getAll
+    recoveryAPI      → getProgress
+
+---------- 4.4 components/BottomNav.jsx ----------
+
+  公共底部导航栏组件，接收 items 数组（path/label/icon），
+  根据当前路由高亮对应Tab。患者端和医护端各有5个Tab。
+
+  患者端Tab：首页 / 镇痛 / 康复 / 消息 / 我的
+  医护端Tab：首页 / 患者 / 预警 / 消息 / 我的
+
+---------- 4.5 患者端页面详解 ----------
+
+  Home.jsx（患者首页）:
+    - 从 painAPI.getLatest 获取最新疼痛评分，用于滑块默认值
+    - 从 reminderAPI.getList 获取今日提醒列表
+    - 从 messageAPI.getUnreadCount 获取未读消息数
+    - 从 recoveryAPI.getProgress 获取康复进度（术后天数/训练/换药）
+    - 疼痛评分提交：painAPI.submit → 写入数据库
+    - 不良反应上报：reactionAPI.create → 写入数据库
+    - 提醒完成：reminderAPI.updateStatus → 更新数据库状态
+
+  Records.jsx（镇痛管理）:
+    4个Tab切换（疼痛曲线/用药记录/PCA泵/诊疗记录）
+    - 疼痛曲线：从 painAPI.getScores 获取数据，用SVG绘制折线图
+      · 每个数据点根据分值着色（绿≤3/黄4-6/红≥7）
+      · X轴显示日期，Y轴0-10刻度
+    - 用药记录：从 medicationAPI.getList 获取，展示药名/剂量/频率/给药途径
+    - PCA泵：从 pcaAPI.getStatus 获取真实参数
+      · 按压按钮调用 pcaAPI.press → 后端 press_count+1, remaining_ml-bolus_dose
+    - 自评：从 selfRatingAPI.getList 获取历史评价
+      · 提交调用 selfRatingAPI.submit → 写入数据库
+
+  Recovery.jsx（康复中心）:
+    5个折叠面板（饮食/活动/呼吸/伤口/睡眠），点击展开查看指导内容
+
+  Consultation.jsx（消息中心）:
+    5个Tab（通知/预警/康复/咨询/团队）
+    - 通知：从 messageAPI.getConversations 获取对话列表
+    - 预警：从 notificationAPI.getAlerts 获取数据库预警提醒
+    - 康复：从 notificationAPI.getRecovery 获取康复推送
+    - 咨询：从 consultAPI.getList 获取，支持新建咨询
+    - 团队：从 authAPI.getStaff 获取医护人员列表
+
+  Archive.jsx（健康档案）:
+    - 基本信息：从 profileAPI.get 获取（血型/过敏/身高/体重等）
+    - 手术信息：从 surgeryAPI.getList 获取（手术名/日期/医生/麻醉/结果）
+    - 随访记录：从 followUpAPI.getList 获取（日期/医护/内容/状态）
+    - 医生留言：从 doctorNoteAPI.getList 获取（医生/时间/内容）
+
+  Profile.jsx（个人中心）:
+    显示用户信息摘要，提供快捷入口（档案/记录/消息/疼痛/联系），退出登录
+
+  Chat.jsx（聊天详情）:
+    - 从 messageAPI.getMessages 获取历史消息
+    - messageAPI.send 发送新消息
+    - 消息按时间排列，区分自己发送和对方发送
+
+---------- 4.6 医护端页面详解 ----------
+
+  Home.jsx（医护首页）:
+    - 从 taskAPI.getList 获取今日护理任务
+    - 从 authAPI.getPatients 获取患者总数
+    - 显示工作概览（待处理/进行中/已完成）
+    - 任务可更新状态：taskAPI.updateStatus
+
+  Patients.jsx（患者列表）:
+    - 从 authAPI.getPatients 获取所有患者
+    - 每个患者实时查询 painAPI.getLatest 获取最新疼痛分数
+    - 根据分值显示颜色预警标签（≤3绿/4-6黄/≥7红）
+    - 点击跳转 /nurse/patient/:id 查看详情
+
+  PatientDetail.jsx（患者详情）:
+    - 综合展示单个患者的所有信息
+    - 包含基本信息、疼痛趋势图、用药记录、护理任务、诊疗记录
+
+  Alerts.jsx（预警中心）:
+    - 从 nurseAlertAPI.getAll 获取实时预警
+    - 预警由后端实时计算：
+      · 疼痛评分≥7 → 高危(danger)
+      · 疼痛评分4-6 → 注意(caution)
+      · 超过2小时未评估 → 警告(warning)
+      · 不良反应上报 → 根据严重程度分级
+    - 支持按级别筛选（全部/高危/注意/一般）
+    - "查看患者"按钮跳转到对应患者详情
+    - "已处理"按钮前端标记处理（从列表移除）
+
+  PainPlans.jsx（镇痛方案）:
+    - 从 painPlanAPI.getAll 获取方案列表（后端JOIN查询带患者姓名和床号）
+    - 展开查看PCA泵参数和口服用药方案
+    - 确认方案：painPlanAPI.confirm → 后端更新status为confirmed
+    - 修改方案：painPlanAPI.update（模拟）
+    - 生成文书：模拟操作+toast提示
+
+  Stats.jsx（数据统计）:
+    - 从 statsAPI.getAll 获取科室统计数据
+      （总患者数/平均疼痛/控制率/不良反应数/平均住院日/满意度）
+    - 从 statsAPI.getTrend 获取7天趋势数据
+    - 趋势图用SVG绘制，每天数据包括：日期/控制率/评估总数
+    - 每个数据点显示具体百分比数值
+
+  Settings.jsx（系统设置）:
+    - 从 nurseSettingAPI.get 加载当前设置
+    - 4个开关：疼痛预警/未评估提醒/不良反应预警/自动用药提醒
+    - 每次切换开关立即调用 nurseSettingAPI.update 保存到数据库
+    - 刷新页面后状态保持（已持久化）
+
+  Messages.jsx（消息中心）:
+    与患者端类似，显示对话列表，支持收发消息
+
+  Profile.jsx（个人中心）:
+    显示医护人员信息，提供快捷入口
+
+  Chat.jsx（聊天详情）:
+    与患者端Chat.jsx逻辑相同
+
+================================================================================
+五、Android端代码详解
+================================================================================
+
+---------- 5.1 AndroidManifest.xml ----------
+
+  声明两个权限：
+    INTERNET           → 允许网络访问（连接后端API）
+    ACCESS_NETWORK_STATE → 检测网络状态
+
+  android:usesCleartextTraffic="true"
+    → 允许HTTP明文通信（后端使用HTTP而非HTTPS）
+
+  两个Activity：
+    SplashActivity → 启动页（带APP Logo的欢迎页，1.5秒后跳转）
+    MainActivity   → 主页面（WebView容器）
+
+---------- 5.2 SplashActivity.java ----------
+
+  启动页Activity：
+    - 显示APP Logo和名称
+    - 延迟1500毫秒后自动跳转到MainActivity
+    - 跳转后调用finish()关闭自身（防止回退到启动页）
+
+---------- 5.3 MainActivity.java ----------
+
+  核心WebView容器，负责加载前端页面并与后端通信。
+
+  关键配置：
+    setJavaScriptEnabled(true)                → 启用JavaScript
+    setDomStorageEnabled(true)                → 启用localStorage
+    setAllowFileAccess(true)                  → 允许file://协议
+    setAllowUniversalAccessFromFileURLs(true) → 允许跨域访问
+    setMixedContentMode(ALWAYS_ALLOW)         → 允许混合内容（HTTP+file）
+
+  API地址注入：
+    onPageFinished回调中注入JavaScript：
+    window._ANDROID_ENV = true;
+    window._API_BASE = 'http://10.0.2.2:3001/api';
+    → 前端api/index.js中的getBaseURL()会读取这些变量
+
+  返回键处理：
+    - WebView有历史记录 → 后退一页
+    - 无历史记录 → 双击退出（2秒内按两次Back键退出APP）
+
+  加载入口：
+    webView.loadUrl("file:///android_asset/www/index.html")
+    → 加载 assets/www/ 目录下的前端构建产物
+
+---------- 5.4 资源文件 ----------
+
+  layout/activity_main.xml：
+    包含全屏WebView + 顶部进度条（加载时显示）
+
+  layout/activity_splash.xml：
+    启动页布局（Logo + APP名称 + 加载提示）
+
+  values/colors.xml：
+    定义主题色 primary=#05C8AC（薄荷绿）
+
+  values/strings.xml：
+    APP名称 = 术后疼痛管理
+
+  values/themes.xml：
+    基于Material Design主题，自定义状态栏颜色
+
+================================================================================
+六、数据库设计（全部16张表）
+================================================================================
+
+  下面列出所有数据表及其字段说明：
+
+  1. users（用户表）
+     id, username, password(bcrypt), role(patient/nurse/admin),
+     name, phone, avatar, gender, age, department, title, created_at
+
+  2. pain_scores（疼痛评分表）
+     id, patient_id(FK→users), score(0-10), description, body_part, recorded_at
+
+  3. reminders（今日提醒表）
+     id, patient_id(FK), content, remind_time, type(medication/treatment/
+     rehabilitation/vital_signs/examination/diet), status(pending/done/missed),
+     created_at
+
+  4. medical_records（诊疗记录表）
+     id, patient_id(FK), nurse_id(FK), title, content, type(admission/surgery/
+     nursing/examination/general), diagnosis, treatment, created_at
+
+  5. messages（消息表）
+     id, sender_id(FK), receiver_id(FK), content, type, is_read, created_at
+
+  6. consultations（咨询表）
+     id, patient_id(FK), nurse_id(FK), title, description,
+     status(pending/in_progress/resolved/closed), created_at, updated_at
+
+  7. health_profiles（健康档案表）
+     id, patient_id(FK,UNIQUE), blood_type, allergies, medical_history,
+     emergency_contact, emergency_phone, height, weight, bed_number, ward,
+     admission_date, updated_at
+
+  8. nursing_tasks（护理任务表）
+     id, nurse_id(FK), patient_id(FK), title, content,
+     priority(urgent/high/normal/low), status(pending/in_progress/completed),
+     scheduled_time, completed_at, created_at
+
+  9. adverse_reactions（不良反应表）
+     id, patient_id(FK), type(nausea/dizziness/breathing/rash/drowsiness/other),
+     severity(mild/moderate/severe), description, status, created_at
+
+  10. medication_records（用药记录表）
+      id, patient_id(FK), medication_name, dosage, frequency,
+      route(oral/injection/inhalation/sublingual), start_date, status, created_at
+
+  11. pca_pump_status（PCA泵状态表）
+      id, patient_id(FK), drug_name, background_dose, bolus_dose, lock_time,
+      press_count, remaining_ml, status(running/stopped), updated_at
+
+  12. self_ratings（镇痛自评表）
+      id, patient_id(FK), rating(0-3: 非常满意/比较满意/一般/不太满意), created_at
+
+  13. surgery_records（手术记录表）
+      id, patient_id(FK), surgery_name, surgery_date, surgeon,
+      operating_room, anesthesia_type, result, created_at
+
+  14. follow_up_records（随访记录表）
+      id, patient_id(FK), doctor_name, content, follow_date,
+      status(completed/pending), created_at
+
+  15. doctor_notes（医生留言表）
+      id, patient_id(FK), doctor_name, content, created_at
+
+  16. patient_notifications（患者通知表）
+      id, patient_id(FK), title, content, type(alert/recovery),
+      sub_type(assessment/medication/rehab/pain/diet/activity/breathing/
+      wound/sleep/examination), is_read, created_at
+
+  17. pain_plans（镇痛方案表）
+      id, patient_id(FK), diagnosis, pca_drug, pca_bg, pca_bolus, pca_lock,
+      oral_drugs(用|分隔多个药物), status(pending/confirmed), updated_at
+
+  18. nurse_settings（护士设置表）
+      id, nurse_id(FK,UNIQUE), pain_alert(0/1), no_assess_alert(0/1),
+      reaction_alert(0/1), auto_remind(0/1), updated_at
+
+================================================================================
+七、API接口文档（全部端点）
+================================================================================
+
+  基础URL: http://localhost:3001/api
+  认证方式: 除登录外，所有接口需要 Header: Authorization: Bearer <token>
+
+  完整端点清单（共29个）：
+
+  POST   /auth/login                    → 登录
+  GET    /auth/staff                     → 获取医护列表
+  GET    /auth/patients                  → 获取患者列表
+  GET    /pain-scores/:pid               → 患者疼痛评分列表
+  GET    /pain-scores/:pid/latest        → 最新评分
+  POST   /pain-scores                    → 提交评分
+  GET    /reminders/:pid                 → 提醒列表
+  PUT    /reminders/:id/status           → 更新提醒状态
+  GET    /records/:pid                   → 诊疗记录
+  GET    /messages/conversations         → 对话列表
+  GET    /messages/:otherId              → 聊天记录
+  POST   /messages                       → 发送消息
+  GET    /messages/unread/count          → 未读数
+  GET    /consultations                  → 咨询列表
+  POST   /consultations                  → 创建咨询
+  GET    /health-profiles/:pid           → 健康档案
+  GET    /nursing-tasks                  → 护理任务
+  PUT    /nursing-tasks/:id/status       → 更新任务状态
+  GET    /adverse-reactions/:pid         → 不良反应列表
+  POST   /adverse-reactions              → 上报不良反应
+  GET    /medications/:pid               → 用药记录
+  GET    /medications/stats/all          → 全局统计
+  GET    /pca-pump/:pid                  → PCA泵状态
+  PUT    /pca-pump/:pid/press            → 按压PCA泵
+  GET    /self-ratings/:pid              → 自评列表
+  POST   /self-ratings                   → 提交自评
+  GET    /surgery-records/:pid           → 手术记录
+  GET    /follow-ups/:pid                → 随访记录
+  GET    /doctor-notes/:pid              → 医生留言
+  GET    /notifications/:pid?type=       → 患者通知
+  GET    /pain-plans                     → 镇痛方案列表
+  PUT    /pain-plans/:id/confirm         → 确认方案
+  PUT    /pain-plans/:id                 → 修改方案
+  GET    /nurse-settings/:nid            → 护士设置
+  PUT    /nurse-settings/:nid            → 保存设置
+  GET    /nurse-alerts                   → 实时预警
+  GET    /stats/trend                    → 7天趋势
+  GET    /recovery-progress/:pid         → 康复进度
+  GET    /health                         → 健康检查
+
+================================================================================
+八、前后端数据流说明
+================================================================================
+
+  典型数据流（以"患者提交疼痛评分"为例）：
+
+  1. 用户在Home.jsx拖动滑块到6分，点击"记录疼痛评分"
+  2. 前端调用 painAPI.submit({ score:6, description:'...', body_part:'...' })
+  3. api/index.js 中 axios 发送 POST /api/pain-scores
+     → 自动附加 Authorization: Bearer <token>
+  4. 后端 painScores.js 路由接收请求
+     → authMiddleware 验证token，提取 req.user.id
+     → db.prepare('INSERT INTO pain_scores ...').run(...)
+     → db.save() 持久化到磁盘
+     → 返回 { code: 200, data: { id, score, ... } }
+  5. 前端收到响应，调用 loadData() 重新加载页面数据
+  6. 疼痛曲线SVG图表重新绘制，包含新的数据点
+
+  典型数据流（以"护士确认镇痛方案"为例）：
+
+  1. 护士在PainPlans.jsx展开某个方案，点击"确认方案"
+  2. 前端调用 painPlanAPI.confirm(planId)
+  3. axios 发送 PUT /api/pain-plans/2/confirm
+  4. 后端 patientData.js 路由接收
+     → UPDATE pain_plans SET status='confirmed' WHERE id=2
+     → db.save()
+     → 返回 { code: 200, message: '方案已确认' }
+  5. 前端调用 loadPlans() 刷新列表
+  6. 该方案的状态标签从"待确认"变为"已确认"，确认按钮消失
+
+================================================================================
+九、角色权限与路由隔离
+================================================================================
+
+  系统严格区分两种角色：patient（患者）和 nurse（医护）
+
+  【前端隔离】
+    App.jsx 中的 ProtectedRoute 组件：
+    - /patient/* 路由要求 role === 'patient'
+    - /nurse/* 路由要求 role === 'nurse'
+    - 角色不匹配自动重定向到登录页
+    - 两端底部导航完全独立，不会出现交叉
+
+  【后端隔离】
+    - authMiddleware 统一验证token
+    - 患者接口通过 patientId 参数限制只能访问自己的数据
+    - 护士接口可以访问所有患者数据（工作需要）
+
+  【功能分工】
+    患者端独有功能：疼痛自评、PCA泵按压、查看康复指导
+    医护端独有功能：预警中心、镇痛方案管理、数据统计、系统设置
+    共有功能（但界面不同）：消息聊天、查看基本信息
+
+================================================================================
+十、关键设计决策与实现思路
+================================================================================
+
+  1. 为什么用sql.js而不是MySQL/PostgreSQL？
+     → 零安装依赖，npm install即可使用，不需要用户安装数据库软件
+     → 数据库就是一个文件(healthcare.db)，方便携带和备份
+     → 适合毕设演示场景，数据量小
+
+  2. 为什么用HashRouter而不是BrowserRouter？
+     → Android WebView加载本地file://协议的HTML
+     → BrowserRouter依赖服务器端路由配置，file://下无法工作
+     → HashRouter使用URL的#fragment部分做路由，不依赖服务器
+
+  3. 为什么前端构建到android/assets/www？
+     → Vite构建产物（HTML+JS+CSS）放入Android assets目录
+     → WebView通过 file:///android_asset/www/index.html 加载
+     → 前端代码随APP安装，无需额外部署前端服务器
+
+  4. 为什么护士预警是实时计算而非存表？
+     → 预警基于最新的疼痛评分和不良反应数据
+     → 如果存表，数据更新后预警信息会过时
+     → 实时计算确保每次查看都是最新状态
+
+  5. 图表为什么用SVG手绘而不是ECharts/Chart.js？
+     → 减少依赖体积（ECharts约1MB）
+     → SVG可以完全响应式，适配不同屏幕
+     → 数据量小（最多7-10个点），手绘SVG完全够用
+
+  6. 前端API地址如何动态切换？
+     → api/index.js 中 getBaseURL() 根据环境自动判断：
+       · Android WebView → 读取Java注入的 window._API_BASE
+       · 浏览器开发 → 使用 /api（Vite proxy代理到3001端口）
+     → 同一份代码自动适配不同运行环境
+
+================================================================================
+  文档编写完成。本文档覆盖了项目的全部代码结构、技术实现和设计思路。
+================================================================================
